@@ -7,7 +7,8 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_VISIBILITY_PRESET hidden)
 
 set(SRC_FILES
-	src/ssisdump.cpp)
+	src/ssisdump.cpp
+	src/aes.cpp)
 
 add_executable(ssisdump ${SRC_FILES})
 

@@ -3,19 +3,18 @@
 #include <iostream>
 #include <span>
 #include <tdscpp.h>
+#include "aes.h"
 
 using namespace std;
 
 struct project {
-    project(int64_t id, string_view name, span<const uint8_t> enc) : id(id), name(name) {
-        this->enc.assign(enc.begin(), enc.end());
+    project(int64_t id, string_view name, span<const uint8_t> data) : id(id), name(name) {
+        this->data.assign(data.begin(), data.end());
     }
 
     int64_t id;
     string name;
-    vector<uint8_t> enc;
-    vector<uint8_t> key;
-    vector<uint8_t> iv;
+    vector<uint8_t> data;
 };
 
 static void dump_ssis(string_view db_server, string_view db_username, string_view db_password) {
@@ -51,6 +50,10 @@ JOIN internal.object_versions ON object_versions.object_id = projects.project_id
     }
 
     for (auto& p : projs) {
+        vector<uint8_t> key;
+        vector<uint8_t> iv;
+        AES_ctx ctx;
+
         const auto& key_name = "MS_Enckey_Proj_"s + to_string(p.id);
 
         tds.run(tds::no_check{"OPEN SYMMETRIC KEY " + key_name + " DECRYPTION BY CERTIFICATE MS_Cert_Proj_" + to_string(p.id)});
@@ -61,14 +64,16 @@ JOIN internal.object_versions ON object_versions.object_id = projects.project_id
             if (!sq.fetch_row())
                 throw runtime_error("Could not find key " + key_name + " in SSISDB.internal.catalog_encryption_keys.");
 
-            p.key.assign(sq[0].val.begin(), sq[0].val.end());
-            p.iv.assign(sq[1].val.begin(), sq[1].val.end());
+            key.assign(sq[0].val.begin(), sq[0].val.end());
+            iv.assign(sq[1].val.begin(), sq[1].val.end());
         }
 
         tds.run(tds::no_check{"CLOSE SYMMETRIC KEY " + key_name});
+
+        AES256_init_ctx_iv(&ctx, key.data(), iv.data());
+        AES256_CBC_decrypt_buffer(&ctx, p.data.data(), p.data.size());
     }
 
-    // FIXME - decrypt
     // FIXME - unzip
     // FIXME - Git
 }
