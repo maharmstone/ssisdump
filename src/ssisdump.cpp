@@ -3,6 +3,8 @@
 #include <iostream>
 #include <span>
 #include <tdscpp.h>
+#include <archive.h>
+#include <archive_entry.h>
 #include "aes.h"
 
 using namespace std;
@@ -15,7 +17,63 @@ struct project {
     int64_t id;
     string name;
     vector<uint8_t> data;
+    vector<pair<string, vector<uint8_t>>> files;
 };
+
+class archive_closer {
+public:
+    typedef archive* pointer;
+
+    void operator()(archive* a) {
+        archive_read_free(a);
+    }
+};
+
+using archive_t = unique_ptr<archive*, archive_closer>;
+
+static void extract_zip_files(span<const uint8_t> zip, vector<pair<string, vector<uint8_t>>>& files) {
+    struct archive_entry* entry;
+
+    archive_t a{archive_read_new()};
+
+    if (!a)
+        throw runtime_error("archive_read_new failed");
+
+    archive_read_support_filter_all(a.get());
+    archive_read_support_format_all(a.get());
+
+    auto r = archive_read_open_memory(a.get(), zip.data(), zip.size());
+
+    if (r != ARCHIVE_OK)
+        throw runtime_error(archive_error_string(a.get()));
+
+    while (archive_read_next_header(a.get(), &entry) == ARCHIVE_OK) {
+        vector<uint8_t> data;
+
+        data.resize(archive_entry_size(entry));
+
+        do {
+            const void* buf;
+            size_t size;
+            la_int64_t offset;
+
+            auto r = archive_read_data_block(a.get(), &buf, &size, &offset);
+
+            if (r == ARCHIVE_EOF)
+                break;
+
+            if (r != ARCHIVE_OK)
+                throw runtime_error(archive_error_string(a.get()));
+
+            if (size == 0)
+                break;
+
+            memcpy(data.data() + offset, buf, size);
+        } while (true);
+
+        files.emplace_back(archive_entry_pathname(entry), data);
+    }
+}
 
 static void dump_ssis(string_view db_server, string_view db_username, string_view db_password) {
     vector<project> projs;
@@ -72,9 +130,10 @@ JOIN internal.object_versions ON object_versions.object_id = projects.project_id
 
         AES256_init_ctx_iv(&ctx, key.data(), iv.data());
         AES256_CBC_decrypt_buffer(&ctx, p.data.data(), p.data.size());
+
+        extract_zip_files(p.data, p.files);
     }
 
-    // FIXME - unzip
     // FIXME - Git
 }
 

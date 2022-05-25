@@ -13,8 +13,10 @@ set(SRC_FILES
 add_executable(ssisdump ${SRC_FILES})
 
 find_package(tdscpp REQUIRED)
+find_package(LibArchive REQUIRED)
 
 target_link_libraries(ssisdump tdscpp)
+target_link_libraries(ssisdump LibArchive::LibArchive)
 
 if(NOT MSVC)
 	target_compile_options(ssisdump PUBLIC -Wall -Werror=cast-function-type -Wno-expansion-to-defined -Wunused-parameter -Wtype-limits -Wextra -Wconversion)
