@@ -16,12 +16,12 @@ struct project {
     vector<uint8_t> enc;
 };
 
-static void dump_ssis(const string& db_server, string_view db_username, string_view db_password) {
+static void dump_ssis(string_view db_server, string_view db_username, string_view db_password) {
     vector<project> projs;
 
-    tds::tds tds(db_server, db_username, db_password, "ssisdump");
+    tds::tds tds(db_server, db_username, db_password, "ssisdump", "SSISDB");
 
-    // FIXME - get SSISDB.internal.get_encryption_algorithm value
+    // FIXME - get internal.get_encryption_algorithm value
 
     // FIXME - folders
 
@@ -29,8 +29,8 @@ static void dump_ssis(const string& db_server, string_view db_username, string_v
         tds::query sq(tds, R"(SELECT projects.project_id,
     projects.name,
     object_versions.object_data
-FROM SSISDB.catalog.projects
-JOIN SSISDB.internal.object_versions ON object_versions.object_id = projects.project_id AND
+FROM catalog.projects
+JOIN internal.object_versions ON object_versions.object_id = projects.project_id AND
     object_versions.object_version_lsn = projects.object_version_lsn)");
 
         while (sq.fetch_row()) {
@@ -38,10 +38,13 @@ JOIN SSISDB.internal.object_versions ON object_versions.object_id = projects.pro
         }
     }
 
-    // FIXME - loop through projects
-    // FIXME - open symmetric key
-    // FIXME - get key and IV from SSISDB.internal.catalog_encryption_keys
-    // FIXME - close symmetric key
+    for (auto& p : projs) {
+        tds.run(tds::no_check{"OPEN SYMMETRIC KEY MS_Enckey_Proj_" + to_string(p.id) + " DECRYPTION BY CERTIFICATE MS_Cert_Proj_" + to_string(p.id)});
+
+        // FIXME - get key and IV from internal.catalog_encryption_keys
+
+        tds.run(tds::no_check{"CLOSE SYMMETRIC KEY MS_Enckey_Proj_" + to_string(p.id)});
+    }
 
     // FIXME - Git
 }
