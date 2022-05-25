@@ -23,7 +23,17 @@ static void dump_ssis(string_view db_server, string_view db_username, string_vie
 
     tds::tds tds(db_server, db_username, db_password, "ssisdump", "SSISDB");
 
-    // FIXME - get internal.get_encryption_algorithm value
+    {
+        tds::query sq(tds, "SELECT internal.get_encryption_algorithm()");
+
+        if (!sq.fetch_row())
+            throw runtime_error("SSISDB.internal.get_encryption_algorithm returned no value.");
+
+        auto s = (string)sq[0];
+
+        if (s != "AES_256")
+            throw runtime_error("Unknown encryption algorithm " + s + ".");
+    }
 
     // FIXME - folders
 
