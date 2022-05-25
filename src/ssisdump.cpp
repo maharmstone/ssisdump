@@ -10,13 +10,13 @@
 using namespace std;
 
 struct project {
-    project(int64_t id, span<const uint8_t> data) : id(id) {
+    project(int64_t id, span<const std::byte> data) : id(id) {
         this->data.assign(data.begin(), data.end());
     }
 
     int64_t id;
-    vector<uint8_t> data;
-    vector<pair<string, vector<uint8_t>>> files;
+    vector<std::byte> data;
+    vector<pair<string, vector<std::byte>>> files;
 };
 
 class archive_closer {
@@ -30,7 +30,7 @@ public:
 
 using archive_t = unique_ptr<archive*, archive_closer>;
 
-static void extract_zip_files(span<const uint8_t> zip, vector<pair<string, vector<uint8_t>>>& files) {
+static void extract_zip_files(span<const std::byte> zip, vector<pair<string, vector<std::byte>>>& files) {
     struct archive_entry* entry;
 
     archive_t a{archive_read_new()};
@@ -47,7 +47,7 @@ static void extract_zip_files(span<const uint8_t> zip, vector<pair<string, vecto
         throw runtime_error(archive_error_string(a.get()));
 
     while (archive_read_next_header(a.get(), &entry) == ARCHIVE_OK) {
-        vector<uint8_t> data;
+        vector<std::byte> data;
 
         data.resize(archive_entry_size(entry));
 
@@ -100,7 +100,7 @@ JOIN internal.object_versions ON object_versions.object_id = projects.project_id
     object_versions.object_version_lsn = projects.object_version_lsn)");
 
             while (sq.fetch_row()) {
-                projs.emplace_back((int64_t)sq[0], sq[1].val);
+                projs.emplace_back((int64_t)sq[0], span((std::byte*)sq[1].val.data(), sq[1].val.size()));
             }
         }
 
@@ -126,7 +126,7 @@ JOIN internal.object_versions ON object_versions.object_id = projects.project_id
             tds.run(tds::no_check{"CLOSE SYMMETRIC KEY " + key_name});
 
             AES256_init_ctx_iv(&ctx, key.data(), iv.data());
-            AES256_CBC_decrypt_buffer(&ctx, p.data.data(), p.data.size());
+            AES256_CBC_decrypt_buffer(&ctx, (uint8_t*)p.data.data(), p.data.size());
 
             extract_zip_files(p.data, p.files);
         }
