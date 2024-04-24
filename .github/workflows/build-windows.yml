@@ -1,0 +1,41 @@
+name: build x86_64-pc-windows-msvc
+on: [push]
+env:
+   PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/etc/eselect/wine/bin
+jobs:
+  x86_64-pc-windows-msvc:
+    runs-on: msvc-wine
+    steps:
+      - run: echo "SHORT_SHA=`echo ${{ github.sha }} | cut -c1-8`" >> $GITHUB_ENV
+      - run: git clone ${{ github.server_url }}/${{ github.repository }} ${SHORT_SHA}
+      - run: cd ${SHORT_SHA} && git checkout ${{ github.sha }}
+      - run: mkdir tdscpp && cd tdscpp && wget -qO- ${{ github.server_url }}/maharmstone/tdscpp/releases/download/latest/x86_64-pc-windows-msvc.zip > tdscpp.zip && unzip tdscpp.zip
+      - run: mkdir nlohmann-json && cd nlohmann-json && wget -qO- https://www.burntcomma.com/nlohmann-json-3.11.2-x86_64-pc-windows-msvc.tar.gz | tar -xz
+      - run: mkdir zlib && cd zlib && wget -qO- https://www.burntcomma.com/zlib-1.2.11-x86_64-pc-windows-msvc.tar.gz | tar -xz
+      - run: mkdir libarchive && cd libarchive && wget -qO- https://www.burntcomma.com/libarchive-3.6.1-x86_64-pc-windows-msvc.tar.gz | tar -xz
+      - run: |
+          cmake -DCMAKE_TOOLCHAIN_FILE=msvc-amd64.cmake \
+            -DCMAKE_INSTALL_PREFIX=${PWD}/install/debug -DCMAKE_INSTALL_INCLUDEDIR=../include \
+            -DCMAKE_FIND_ROOT_PATH="${PWD}/nlohmann-json;${PWD}/tdscpp/debug" \
+            -DLibArchive_ROOT="${PWD}/libarchive/debug" -DLibArchive_INCLUDE_DIR="${PWD}/libarchive/include" \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -S ${SHORT_SHA} -B debug-work && \
+          cmake --build debug-work --parallel `nproc` && \
+          cmake --install debug-work
+      - run: |
+          cmake -DCMAKE_TOOLCHAIN_FILE=msvc-amd64.cmake \
+            -DCMAKE_INSTALL_PREFIX=${PWD}/install \
+            -DCMAKE_FIND_ROOT_PATH="${PWD}/nlohmann-json;${PWD}/tdscpp" \
+            -DLibArchive_ROOT="${PWD}/libarchive" -DLibArchive_INCLUDE_DIR="${PWD}/libarchive/include" \
+            -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+            -S ${SHORT_SHA} -B release-work && \
+          cmake --build release-work --parallel `nproc` && \
+          cmake --install release-work
+      - run: cp tdscpp/debug/bin/tdscpp.dll libarchive/debug/bin/archive.dll zlib/debug/bin/zlibd1.dll install/debug/bin/
+      - run: cp tdscpp/bin/tdscpp.dll libarchive/bin/archive.dll zlib/bin/zlib1.dll install/bin/
+      - uses: actions/upload-artifact@v3
+        with:
+          name: ${{ github.sha }}
+          overwrite: true
+          path: |
+            install
